@@ -1,0 +1,12 @@
+
+urljson: urls.json
+emailjson: emails.json
+smtpaddr: smtp.gmail.com
+smtpport: 587
+smtpusr: name@gmail.com
+smtppw: pw
+dbaddr: none
+dbusr: none
+dbpw: none
+
+debug: True
