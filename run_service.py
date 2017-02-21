@@ -3,7 +3,11 @@ import logging
 import os
 import json
 import smtplib
+import time
 
+from django import db
+
+from DBConnector import DBConnector
 from urllib.request import urlopen
 from lxml import etree
 
@@ -36,8 +40,9 @@ def get_args():
                         help='user login for db')
     parser.add_argument('--dbpw', type=str,
                         help='password for db')
+    parser.add_argument('--loopTime', type=int,
+                        help='time between loop runs in seconds')
     parser.add_argument('--debug', help='Debug Mode', action='store_true')
-    #parser.set_defaults(DEBUG=True)
 
     return parser.parse_args()
 
@@ -69,6 +74,7 @@ def get_rss_tags(url):
         rssitem['description'] = item.xpath("./description/text()")[0]
         rssitem['link'] = item.xpath("./link/text()")[0]
         rssitem['pubDate'] = item.xpath("./pubDate/text()")[0]
+        rssitem['guid'] = item.xpath("./guid/text()")[0]
         items.append(rssitem)
     return items
 
@@ -79,25 +85,46 @@ if __name__ == '__main__':
         log.setLevel(logging.DEBUG)
     else:
         log.setLevel(logging.INFO)
+
+    fileHandler = logging.FileHandler('steamGrpService.log')
+    fileHandler.setFormatter(logFormatter)
+    log.addHandler(fileHandler)
+
+    # loading data
+    dbcon = DBConnector(args.dbusr, args.dbpw, args.dbaddr, 1000)
+    dbcon.connect()
+
     log.info('loading group urls from json...')
     urls_dict = json.load(open(args.urljson, 'r'))
 
+    log.info('loading mail template')
     mail_body = ''
     with open('mail_template.txt', 'r') as f:
         for line in f.readlines():
             mail_body += line
 
-    log.info('loaded mail template:\n'+mail_body)
-    for id in urls_dict:
-        url = urls_dict[id]['url']
-        items = get_rss_tags(url)
-        log.info('got {} announcements from rss feed'.format(items.__len__()))
-        for key in items[0]:
-            mail_body = mail_body.replace('{'+key+'}', items[0][key])
-
+    log.info('loading email recipients')
     email_dict = json.load(open(args.emailjson, 'r'))
     recipients = []
     for id in email_dict:
         recipients.append(email_dict[id]['email'])
-    log.info('sending mail to {} recipients:\n{}'.format(recipients.__len__(), mail_body))
-    send_email(args.smtpusr, args.smtppw, recipients, 'TTSS Mail', mail_body)
+    log.debug(recipients)
+
+    log.info('starting main loop')
+    while True:
+        items = []
+        for id in urls_dict:
+            url = urls_dict[id]['url']
+            items = items + get_rss_tags(url)
+
+        log.info('got {} announcements from rss feed'.format(items.__len__()))
+        for item in items:
+            if not dbcon.isInDB(item['guid']):
+                new_mail = mail_body
+                for key in item:
+                    new_mail = new_mail.replace('{' + key + '}', item[key])
+                log.info('sending mail to {} recipients:\n{}'.format(recipients.__len__(), mail_body))
+                send_email(args.smtpusr, args.smtppw, recipients, 'TTSS Mail', new_mail)
+                log.info('adding send announcement to db:\n{}'.format(item['guid']))
+                dbcon.saveToDb(item['title'], item['guid'])
+        time.sleep(args.loopTime)
