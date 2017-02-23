@@ -7,11 +7,7 @@ db = SqliteDatabase('steamgrpAnnos.db')
 
 class DBConnector:
 
-    def __init__(self, usrname, usrpw, dbhost, dbport):
-        self.usrname = usrname
-        self.usrpw= usrpw
-        self.dbhost = dbhost
-        self.dbport = dbport
+    def __init__(self):
         self.isConnected = False
 
     def connect(self):
@@ -21,24 +17,24 @@ class DBConnector:
         db.create_table(SendAnnouncement, True)
         self.isConnected = True
 
-    def saveToDb(self, title, guid):
+    def saveToDb(self, title, unique_id):
         log.info('querying db')
-        entry = SendAnnouncement.create(title=title, guid=guid)
+        entry = SendAnnouncement.create(title=title, uniqueId=unique_id)
         entry.save()
 
-    def isInDB(self, guid):
-        log.info('querying db for guid: '+guid)
+    def isInDB(self, unique_id):
+        log.info('querying db for uniqueId: ' + unique_id)
         try:
-            query = SendAnnouncement.get(SendAnnouncement.guid == guid)
+            result = SendAnnouncement.get(SendAnnouncement.uniqueId == unique_id)
         except:
             return False
-        log.info('guid is in db')
+        log.info('uniqueId is in db with title: ' + result.title)
         return True
 
 
 class SendAnnouncement(Model):
     title = CharField()
-    guid = CharField()
+    uniqueId = CharField()
 
     class Meta:
-        database = db  # This model uses the "people.db" database.
+        database = db

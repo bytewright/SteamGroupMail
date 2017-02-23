@@ -1,12 +1,12 @@
+# jsons containing data
+urljson:
+emailjson:
 
-urljson: urls.json
-emailjson: emails.json
-smtpaddr: smtp.gmail.com
+# email settings
+smtpaddr:"smtp.gmail.com"
 smtpport: 587
-smtpusr: name@gmail.com
-smtppw: pw
-dbaddr: none
-dbusr: none
-dbpw: none
+smtpusr:
+smtppw:
 
-debug: True
+# exec every x seconds
+loopTime: 300

@@ -1,9 +1,11 @@
 {title}
 
 {description}
------------------------------
-Veroeffentlicht am {pubDate}
+
 link: {link}
 -----------------------------
 Spielevorstellungen: https://steamcommunity.com/groups/TTSStammtisch/discussions/1/
 Kalender: https://steamcommunity.com/groups/TTSStammtisch#events
+-----------------------------
+Veroeffentlicht am {pubDate}
+id: {uniqueId}
