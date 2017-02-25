@@ -6,7 +6,7 @@ import smtplib
 import time
 
 from DBConnector import DBConnector
-from SiteParser import SiteParser
+from SiteParser_etree import SiteParser
 
 logFormatter = logging.Formatter("%(asctime)s [%(module)14s] [%(levelname)5s] %(message)s")
 log = logging.getLogger()
@@ -17,12 +17,14 @@ log.addHandler(consoleHandler)
 
 
 def get_args():
-    configpath = os.path.join(os.path.dirname(__file__), 'config.ini')
+    configpath = os.path.join(os.path.dirname(__file__), 'data/config.ini')
     parser = configargparse.ArgParser(default_config_files=[configpath])
     parser.add_argument('--urljson', type=str,
                         help='json file, containing rss-feeds')
     parser.add_argument('--emailjson', type=str,
                         help='json file, containing recipients')
+    parser.add_argument('--mailtemplate', type=str,
+                        help='text file, containing a template for each mail')
     parser.add_argument('--smtpaddr', type=str,
                         help='address of mail server')
     parser.add_argument('--smtpport', type=int,
@@ -66,7 +68,7 @@ def send_mail_for_each_item(new_items):
 
     log.info('loading mail template')
     new_mail = ''
-    with open('mail_template.txt', 'r') as f:
+    with open(args.mailtemplate, 'r') as f:
         for line in f.readlines():
             new_mail += line
     log.debug(new_mail)
@@ -110,11 +112,12 @@ if __name__ == '__main__':
         with open(args.urljson, 'r') as f:
             log.debug('loading group urls from json...')
             urls_dict = json.load(f)
-            for id in urls_dict:
-                if urls_dict[id]['type'] in parser.canParse:
-                    items = items + parser.get_tags_dict(urls_dict[id]['url'])
+            for url_id in urls_dict:
+                if urls_dict[url_id]['type'] in parser.canParse:
+                    items = items + parser.get_item_list(urls_dict[url_id]['url'], urls_dict[url_id]['type'])
 
         log.info('got {} announcements from rss feed'.format(items.__len__()))
-        send_mail_for_each_item(items)
+        if items.__len__() > 0:
+            send_mail_for_each_item(items)
         log.info('sleeping for {} seconds...'.format(args.loopTime))
         time.sleep(args.loopTime)

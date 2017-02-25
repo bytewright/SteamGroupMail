@@ -2,7 +2,7 @@ import logging
 from peewee import *
 
 log = logging.getLogger()
-db = SqliteDatabase('steamgrpAnnos.db')
+db = SqliteDatabase('db/steamgrpAnnos.db')
 
 
 class DBConnector:
