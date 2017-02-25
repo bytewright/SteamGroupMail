@@ -1,12 +1,17 @@
+# -*- coding: utf-8 -*-
+
 import configargparse
 import logging
 import os
 import json
 import smtplib
 import time
+import re
+import string
 
 from DBConnector import DBConnector
 from SiteParser_etree import SiteParser
+
 
 logFormatter = logging.Formatter("%(asctime)s [%(module)14s] [%(levelname)5s] %(message)s")
 log = logging.getLogger()
@@ -18,33 +23,54 @@ log.addHandler(consoleHandler)
 
 def get_args():
     configpath = os.path.join(os.path.dirname(__file__), 'data/config.ini')
-    parser = configargparse.ArgParser(default_config_files=[configpath])
-    parser.add_argument('--urljson', type=str,
+    configparser = configargparse.ArgParser(default_config_files=[configpath])
+    configparser.add_argument('--urljson', type=str,
                         help='json file, containing rss-feeds')
-    parser.add_argument('--emailjson', type=str,
+    configparser.add_argument('--emailjson', type=str,
                         help='json file, containing recipients')
-    parser.add_argument('--mailtemplate', type=str,
+    configparser.add_argument('--mailtemplate', type=str,
                         help='text file, containing a template for each mail')
-    parser.add_argument('--smtpaddr', type=str,
+    configparser.add_argument('--smtpaddr', type=str,
                         help='address of mail server')
-    parser.add_argument('--smtpport', type=int,
+    configparser.add_argument('--smtpport', type=int,
                         help='port of mail server')
-    parser.add_argument('--smtpusr', type=str,
+    configparser.add_argument('--smtpusr', type=str,
                         help='user login for mail server')
-    parser.add_argument('--smtppw', type=str,
+    configparser.add_argument('--smtppw', type=str,
                         help='password for mail server')
-    parser.add_argument('--loopTime', type=int,
+    configparser.add_argument('--loopTime', type=int,
                         help='time between loop runs in seconds')
-    parser.add_argument('--debug', help='Debug Mode', action='store_true')
+    configparser.add_argument('--debug', help='Debug Mode', action='store_true')
 
-    return parser.parse_args()
+    return configparser.parse_args()
+
+
+def clean_text(urlcontent):
+    tag_re = re.compile(r'(<!--.*?-->|<[^>]*>)')
+    urlcontent = urlcontent.replace('<br>', '\n')
+    content = tag_re.sub('', urlcontent)
+    #remove umlaute
+    table = {
+        ord('ä'): 'ae',
+        ord('ö'): 'oe',
+        ord('ü'): 'ue',
+        ord('ß'): 'ss',
+        ord('Ä'): 'Ae',
+        ord('Ö'): 'Oe',
+        ord('Ü'): 'Ue',
+    }
+    content = content.translate(table)
+    #remove everything not ascii
+    return ''.join(filter(lambda x: x in set(string.printable), content))
 
 
 def send_email(gmail_user, gmail_pwd, recipient, subject, body):
     recipients = recipient if type(recipient) is list else [recipient]
-    # Prepare actual message
-    message = """From: %s\nTo: %s\nSubject: %s\n\n%s
-    """ % (gmail_user, ", ".join(recipients), subject, body)
+
+    message = 'From: {}\nSubject: {}\n\n{}'.format(gmail_user,
+                                                   subject,
+                                                   body)
+
     log.info('sending mail to {} recipients:\n{}'.format(recipients.__len__(), message))
     try:
         server_ssl = smtplib.SMTP_SSL("smtp.gmail.com", 465)
@@ -53,8 +79,10 @@ def send_email(gmail_user, gmail_pwd, recipient, subject, body):
         server_ssl.sendmail(gmail_user, recipients, message)
         server_ssl.close()
         log.info('successfully sent the mail')
+        return True
     except:
         log.error("failed to send mail")
+        return False
 
 
 def send_mail_for_each_item(new_items):
@@ -67,27 +95,29 @@ def send_mail_for_each_item(new_items):
     log.debug(recipients)
 
     log.info('loading mail template')
-    new_mail = ''
+    mail_template = ''
     with open(args.mailtemplate, 'r') as f:
         for line in f.readlines():
-            new_mail += line
-    log.debug(new_mail)
+            mail_template += line
+    log.debug(mail_template)
 
     for item in new_items:
+        new_mail = mail_template
         if dbconnection.isInDB(item['uniqueId']):
             continue
         for key in item:
             text_replacement = '{' + key + '}'
             if new_mail.__contains__(text_replacement):
-                new_mail = new_mail.replace('{' + key + '}', item[key])
+                new_mail = new_mail.replace('{' + key + '}', clean_text(item[key]))
             else:
                 log.error('mail template has no placeholder: '+text_replacement)
-                new_mail += '{}: {}'.format(key, item[key])
+                new_mail += '{}: {}'.format(key, clean_text(item[key]))
 
-        send_email(args.smtpusr, args.smtppw, recipients, 'TTSS Mail', new_mail)
-
-        log.info('adding send announcement to db:\n{}'.format(item['uniqueId']))
-        dbconnection.saveToDb(item['title'], item['uniqueId'])
+        if send_email(args.smtpusr, args.smtppw, recipients, 'TTSS Mail', new_mail):
+            log.info('adding send announcement to db:\n{}'.format(item['uniqueId']))
+            dbconnection.saveToDb(item['title'], item['uniqueId'])
+        else:
+            log.error('send_mail failed')
 
 
 if __name__ == '__main__':
